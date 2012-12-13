@@ -13,8 +13,9 @@ What brew does:
 * If any file changes or disappears, or if a new one is introduced, the brew's version hash changes and a compile is triggered
 * It uses an async `compile` function you provide on all matching files, which can do whatever you want
 * It joins the compiles using an async `join` function you provide
+* It can optionally compress results, with an async `compress` function you provide.
 
-Basically: it decouples all this annoying file monitoring from your actual compile/join steps.
+Basically: it decouples all this annoying file monitoring from your actual compile/join/compress steps.
 
 ### Installation
 
