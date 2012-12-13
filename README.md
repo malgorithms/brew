@@ -25,7 +25,7 @@ npm install -g brew
 
 ### Example
 
-The following example in coffeescript simple monitors 2 directories (and all their subdirs) full of `.js` files 
+The following example in coffeescript just monitors 2 directories (and all their subdirs) full of `.js` files 
 and combines them together into a single `.js` file. The ordering of the includes matters, and in this example a certain file is singled out
 to be first, even though it's also requested in one of the later directories.
 
