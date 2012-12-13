@@ -35,8 +35,15 @@ class brew
     if o.onReady?
       o.onReady @getVersionHash(), @getCompiledText()
 
-  getVersionHash:  -> @_versionHash
-  getCompiledText: -> @_txt
+  getVersionHash:  -> 
+    if not (@_versionHash? and @_txt?)
+      throw new Error "getVersionHash() called before onReady(); wait for your brew to brew!"
+    @_versionHash
+
+  getCompiledText: -> 
+    if not (@_versionHash? and @_txt?)
+      throw new Error "getCompiledText() called before onReady(); wait for your brew to brew!"  
+    @_txt
 
 
   # --------------- PRIVATE PARTY BELOW ---------------------------------------

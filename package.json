@@ -1,7 +1,7 @@
 {
  "name": "brew",
  "description": "A NodeJS module for compiling and packaging together files with async updates.",
- "version": "0.0.1",
+ "version": "0.0.2",
  "directories": {
   "lib": "./lib"
  },
@@ -10,6 +10,7 @@
  "dependencies": {
  },
  "devDependencies": {
+  "coffee-script": "*"
   "iced-coffee-script": "*"
  },
  "repository": {
