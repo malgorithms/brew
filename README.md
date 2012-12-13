@@ -1,23 +1,29 @@
-
 # brew
 
-Brew is an npm module to help you keep source files compiled and available with real-time updates. For examples:
+Brew is a NodeJS class that keeps source files compiled and updated asynchronously, in memory. For examples:
 
-* Keeping a bunch of `less` and `css` files compiled into a single `css` file
+* Keeping a bunch of `less` and `css` files compiled into a single chunk of css.
 * Compiling front-end `coffee` and `js` into a single `js` package.
-* Any other kind of compiling you want
+* Compiling templates from `toffee`, `eco`, or whatever into js
+* Heck, any other kind of compiling you want
 
 What brew does:
 
 * It monitors files and directories you specify
-* If any file changes, the brew's version hash changes and recompiles are triggered
+* If any file changes, the brew's version hash changes and a compile is triggered
 * It uses a `compile` function you provide on all matching files
-* It joins the compiles using a `join` function you provide
+* It joins the compiles using a `join` function you provide; this can paste all the individual compiles together and even do a group compile on the concatenation
+
+### Installation
+
+```
+npm install -g brew
+```
 
 ### Example
 
 The following example in coffeescript monitors 2 directories (and all their subdirs) full of `.js` files 
-and combines them together into a single `.js` file. The ordering of the includes matters, so a certain file is singled out
+and combines them together into a single `.js` file. The ordering of the includes matters, and in this example a certain file is singled out
 to be first, even though it's also requested in one of the later directories.
 
 ```coffee-script
@@ -34,15 +40,15 @@ tasty_brew = new brew {
     "./js/bar/bad_code.js"
     "./js/foo/bad_dir/"
   ]
-  match:      /^.*.coffee$/
+  match:      /^.*.js$/ # don't compile anything unless it ends in .js 
   compile:    (path, txt, cb) -> cb null, txt
   join:       (strs, cb)      -> cb null, strs.join "\n"
   onChange:   (vh, txt) -> console.log "the brew has changed; version hash = #{vh}"
-  onReady:    (vh, txt) -> console.log "the brew is ready; versions hash = #{vh}"
+  onReady:    (vh, txt) -> console.log "the brew is ready;    version hash = #{vh}"
 }
 ````
 
-Once a brew is ready, you can access its compiled text and version numbers at any time:
+Once a brew is ready (you've gotten an onReady call), you can access its compiled text and version numbers at any time:
 
 ```coffee-script
 vh  = tasty_brew.getVersionHash()
