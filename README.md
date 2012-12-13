@@ -1,4 +1,4 @@
-# brew
+# BREW
 
 Brew is a NodeJS class that keeps source files compiled and bundled, available in memory. For examples:
 
@@ -15,7 +15,7 @@ What brew does:
 * It joins the compiles using an async `join` function you provide
 * It can optionally compress results, with an async `compress` function you provide.
 
-Basically: it decouples all this annoying file monitoring from your actual compile/join/compress steps.
+Basically: it decouples all this annoying file monitoring from your important compile, join, and compress steps.
 
 ### Installation
 
