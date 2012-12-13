@@ -24,7 +24,7 @@ await b = new brew {
   ]
   match:      /^.*.coffee$/
   compile:    (path, txt, cb) -> cb null, "\n# #{path} compiled with love by brew\n#{txt}"
-  join:       (strs)          -> strs.join "\n# this is a test separator"
+  join:       (strs, cb)      -> cb null, strs.join "\n# this is a test separator"
   logger:     (line)          -> console.log "brew speaks: #{line}"
   onReady:    defer version_hash, txt
   onChange:   (version_hash, txt) -> printIt version_hash, txt

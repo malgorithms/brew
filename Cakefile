@@ -6,17 +6,18 @@ task 'build', 'build the whole jam', (cb) ->
   files = fs.readdirSync 'src'
   files = ('src/' + file for file in files when file.match(/\.coffee$/))
   clearLibJs ->
-    runCoffee ['-c', '-o', 'lib/'].concat(files), ->
-      runCoffee ['-c', 'index.coffee'], ->
+    runIced ['-I', 'inline', '-c', '-o', 'lib/'].concat(files), ->
+      runIced ['-I', 'inline', '-c', 'index.coffee'], ->
         console.log "Done building."
         cb() if typeof cb is 'function'
 
-runCoffee = (args, cb) ->
-  proc =  spawn 'coffee', args
+
+runIced = (args, cb) ->
+  proc =  spawn 'iced', args
   console.log args
   proc.stderr.on 'data', (buffer) -> console.log buffer.toString()
   proc.on        'exit', (status) ->
-    process.exit(1) if status isnt 0
+    process.exit(1) if status != 0
     cb() if typeof cb is 'function'
 
 clearLibJs = (cb) ->

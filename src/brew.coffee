@@ -9,8 +9,8 @@ class brew
       includes: a sorted list of files and/or dirs to include
       excludes: (optional) any exceptions (files and/or dirs) to the includes
       match:    (optional) a regular expression any file must match; say if you want to limit to extensions
-      compile:  (optional) fn to call on each file; takes (filename, str, cb) as arguments; if missing, just returns text
-      join:     (optional) fn takes all the (sorted) compiled strings and joins them together for final output 
+      compile:  (optional) fn to call on each file's contents; takes (filename, str, cb) as arguments; if missing, just returns text
+      join:     (optional) fn takes all the (sorted) compiled strings and joins them together for final output
       onChange: (optional) a callback when anything changes in the brew. takes (passes version_hash, txt) as argument
       onReady:  (optional) a callback for when the first compilation pass is done and the brew is ready
       logger:   (optional) a function that handles lines of logs
@@ -19,7 +19,7 @@ class brew
     @_excludes          = (path.resolve(p) for p in (o.excludes  or []))
     @_match             = o.match     or /.*/
     @_compile           = o.compile   or        (p, str, cb) -> cb null, str
-    @_join              = o.join      or              (strs) -> strs.join "\n"
+    @_join              = o.join      or          (strs, cb) -> cb null, strs.join "\n"
     @_onChange          = o.onChange  or (version_hash, txt) -> 
     @_onReady           = o.onReady   or (version_hash, txt) ->
     @_logger            = o.logger    or null
@@ -48,7 +48,7 @@ class brew
     @_isCompiling = true
     for p, i in @_includes
       await @_recurse p, i, defer()
-    @_flipToNewContent true
+    await @_flipToNewContent true, defer()
     @_isCompiling = false
     @_log "[#{Date.now() - d}ms] performed full pass"
     cb()
@@ -63,22 +63,22 @@ class brew
     @_isCompiling = true
     d = Date.now()
     await @_recurse path, priority, defer()
-    @_flipToNewContent false
+    await @_flipToNewContent false, defer()
     @_isCompiling = false
     @_log "[#{Date.now() - d}ms] performed partial pass of #{path};pri=#{priority}"
 
-  _flipToNewContent: (is_first_pass) ->
+  _flipToNewContent: (is_first_pass, cb) ->
     ###
     puts together all the compilations
     and generates a new version number
     ###
     d = Date.now()
     paths = (fp for fp, f of @_files when f.isOk())
-    paths.sort (b,a) => @_files[a].getPriority() - @_files[b].getPriority()
+    paths.sort (a,b) => @_files[a].getPriority() - @_files[b].getPriority()
     txts = []
     for fp in paths
       txts.push @_files[fp].getCompiledText()
-    res = @_join txts
+    await @_join txts, defer err, res
     if res isnt @_txt
       @_txt         = res
       @_versionHash = crypto.createHash('md5').update(@_txt).digest('hex')[0...8]
@@ -87,6 +87,7 @@ class brew
       @_log "[#{Date.now() - d}ms] flipped to new content"
     else
       @_log "[#{Date.now() - d}ms] content unchanged"
+    cb()
 
   _recurse: (p, priority, cb) ->
     ###
@@ -130,7 +131,7 @@ class brew
 
   _recurseHandleFile: (p, priority, cb) ->
     d = Date.now()
-    if not @_files[p]? then @_files[p] = new file p
+    if not @_files[p]? then @_files[p] = new file p, priority
     @_files[p].setPriority Math.min priority, @_files[p].getPriority()
 
     await @_files[p].possiblyReload @_compile, defer(err, did_reload)

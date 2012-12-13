@@ -1,6 +1,8 @@
 brew
 ====
 
+TOTALLY NOT READY FOR PUBLIC CONSUMPTION
+
 * TODO: this doc
 * TODO: make iced-coffee-script a dev req, and explain it
 * TODO: pipeline first pass building!

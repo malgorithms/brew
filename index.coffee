@@ -1,1 +1,1 @@
-exports.brew = require('./lib/brew')
+exports.brew = require('./lib/brew').brew

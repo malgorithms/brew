@@ -10,7 +10,7 @@
  "dependencies": {
  },
  "devDependencies": {
-  "coffee-script": "*"
+  "iced-coffee-script": "*"
  },
  "repository": {
   "type": "git",
