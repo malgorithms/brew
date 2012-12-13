@@ -11,6 +11,7 @@ class brew
       match:    (optional) a regular expression any file must match; say if you want to limit to extensions
       compile:  (optional) fn to call on each file's contents; takes (filename, str, cb) as arguments; if missing, just returns text
       join:     (optional) fn takes all the (sorted) compiled strings and joins them together for final output
+      compress: (optional) fn that takes final output str and combines together into a new compressed string
       onChange: (optional) a callback when anything changes in the brew. takes (passes version_hash, txt) as argument
       onReady:  (optional) a callback for when the first compilation pass is done and the brew is ready
       logger:   (optional) a function that handles lines of logs
@@ -20,12 +21,14 @@ class brew
     @_match             = o.match     or /.*/
     @_compile           = o.compile   or        (p, str, cb) -> cb null, str
     @_join              = o.join      or          (strs, cb) -> cb null, strs.join "\n"
-    @_onChange          = o.onChange  or (version_hash, txt) -> 
-    @_onReady           = o.onReady   or (version_hash, txt) ->
+    @_compress          = o.compress  or null
+    @_onChange          = o.onChange  or (version_hash, txt, compressed_txt) -> 
+    @_onReady           = o.onReady   or (version_hash, txt, compressed_txt) ->
     @_logger            = o.logger    or null
     @_isCompiling       = false
     @_versionHash       = null
     @_txt               = null
+    @_compressed_txt    = null
     @_includeMembers    = {} # keyed by strings in _includes; points at an array of matches in _files
     @_files             = {} # keyed by full paths to files; points to file class objects
     @_fs_watchers       = {} # keyed by full paths to files or dirs; makes sure we have finite watchers
@@ -33,7 +36,7 @@ class brew
     await @_fullPass defer()
 
     if o.onReady?
-      o.onReady @getVersionHash(), @getCompiledText()
+      o.onReady @getVersionHash(), @getCompiledText(), @getCompressedText()
 
   getVersionHash:  -> 
     if not (@_versionHash? and @_txt?)
@@ -45,6 +48,13 @@ class brew
       throw new Error "getCompiledText() called before onReady(); wait for your brew to brew!"  
     @_txt
 
+  getCompressedText: ->
+    if not (@_versionHash? and @_compressed_txt?)
+      throw new Error "getCompressedText() called before onReady(); wait for your brew to brew!" 
+    if not @_compress?
+      log.brew.info "requested compressed text, but not compress fn provided; returning regular text"
+      return @_txt
+    return @_compressed_txt
 
   # --------------- PRIVATE PARTY BELOW ---------------------------------------
 
@@ -87,10 +97,13 @@ class brew
       txts.push @_files[fp].getCompiledText()
     await @_join txts, defer err, res
     if res isnt @_txt
+      if @_compress?
+        await @_compress res, defer err, cres
+        @_compressed_txt = cres
       @_txt         = res
       @_versionHash = crypto.createHash('md5').update(@_txt).digest('hex')[0...8]
       if not is_first_pass
-        @_onChange @_versionHash, @_txt
+        @_onChange @_versionHash, @_txt, @getCompressedText()
       @_log "[#{Date.now() - d}ms] flipped to new content"
     else
       @_log "[#{Date.now() - d}ms] content unchanged"

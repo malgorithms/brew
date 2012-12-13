@@ -43,18 +43,20 @@ my_tasty_brew = new brew {
     "./js/foo/bad_dir/"
   ]
   match:      /^.*\.js$/ # don't compile anything unless it ends in .js 
-  compile:    (path, txt, cb) -> cb null, txt               # the trivial compile
-  join:       (strs, cb)      -> cb null, (strs.join "\n")  # the trivial join
-  onChange:   (vhash, txt)    -> console.log "the brew has changed; version hash = #{vhash}"
-  onReady:    (vhash, txt)    -> console.log "the brew is ready;    version hash = #{vhash}"
+  compile:    (path, txt, cb)              -> cb null, txt                            # the trivial compile
+  join:       (strs, cb)                   -> cb null, (strs.join "\n")               # the trivial join
+  compress:   (str,  cb)                   -> cb null, str.replace /[ \n\t\r]+/g, ' ' # strip extra whitespace
+  onChange:   (vhash, txt, compressed_txt) -> console.log "the brew has changed; version hash = #{vhash}"
+  onReady:    (vhash, txt, compressed_txt) -> console.log "the brew is ready;    version hash = #{vhash}"
 }
 ````
 
 Once a brew is ready (you've gotten an onReady call), you can access its compiled text and version numbers at any time:
 
 ```coffee-script
-vh  = my_tasty_brew.getVersionHash()
-txt = my_tasty_brew.getCompiledText() 
+vh   = my_tasty_brew.getVersionHash()
+txt  = my_tasty_brew.getCompiledText() 
+ctxt = my_tasty_brew.getCompressedText() 
 ````
 
 ### The parameters, explained
@@ -64,6 +66,7 @@ txt = my_tasty_brew.getCompiledText()
 * `match`:    (optional) a file will only be compiled/included if its name matches this regexp.
 * `compile`:  (optional) your compile function is called on every matching file. You should call back with `err, txt`; the default compile function leaves text unmolested.
 * `join`:     (optional) your join function gets an array of all the compiled texts and is responsible for turning them into one new text. Note that you may wish to do final compilation here, too. For example, with a `less` compilation, you might prefer to do nothing in `compile` but just join them all together and compile the results here.
+* `compress`: (optional) your compress function takes the final joined string, and calls back with a new string, compressed. If you provide a compress function, this allows you to call getCompressedText()
 * `onReady`:  brew calls this once it has made its first pass and compiled & joined everything
 * `onChange`: (optional) this function is called if a version hash changes
 * `logger`:   (optional) if you provide a logger function, brew will pass all kinds of verbose lines of text to it. Your logger function shuould take one parameter, a string.
