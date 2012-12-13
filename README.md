@@ -78,10 +78,8 @@ Yes!
 
 * In your compile function, depending on the output, consider auto-inserting a comment with the name of the source file.
 * In your join function, consider performing a minimization in production but not in dev.
-* You can use brew to:
-   * output to an actual file on the filesystem, or
-   * have an http process just send the brew to a user without bothering to write to the filesystem
-   * either way...
+* In your onChange function, consider writing the result to the file system!
+* Try using brew directly in your web process and use its `getCompiledText()` results to reply to users' requests for JS/CSS/whatever, cutting the filesystem out.
 
 ## Contributing/making changes
 
