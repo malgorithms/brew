@@ -10,7 +10,7 @@
  "dependencies": {
  },
  "devDependencies": {
-  "coffee-script": "*"
+  "coffee-script": "*",
   "iced-coffee-script": "*"
  },
  "repository": {
