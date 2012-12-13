@@ -95,7 +95,4 @@ Yes!
 ### My TODO
 
 * TODO: pipeline first pass building.
-* TODO: special case handling
-	- 2 different files with same names in different mon'd dirs
-	- entire dir deleted
 * Make run_tests.iced actually check some unit tests
