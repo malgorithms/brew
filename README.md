@@ -41,8 +41,8 @@ tasty_brew = new brew {
     "./js/foo/bad_dir/"
   ]
   match:      /^.*\.js$/ # don't compile anything unless it ends in .js 
-  compile:    (path, txt, cb) -> cb null, txt
-  join:       (strs, cb)      -> cb null, strs.join "\n"
+  compile:    (path, txt, cb) -> cb null, txt            # your compile function should call back with err, txt
+  join:       (strs, cb)      -> cb null, strs.join "\n" # your join function should call back with err, txt
   onChange:   (vh, txt) -> console.log "the brew has changed; version hash = #{vh}"
   onReady:    (vh, txt) -> console.log "the brew is ready;    version hash = #{vh}"
 }
