@@ -13,8 +13,9 @@ What brew does:
 * If any file changes or disappears, or if a new one is introduced, the brew's version hash changes and a compile is triggered
 * It uses an async `compile` function you provide on all matching files, which can do whatever you want
 * It joins the compiles using an async `join` function you provide
+* It can optionally compress results, with an async `compress` function you provide.
 
-Basically: it decouples all this annoying file monitoring from your actual compile/join steps.
+Basically: it decouples all this annoying file monitoring from your actual compile/join/compress steps.
 
 ### Installation
 
@@ -24,7 +25,7 @@ npm install -g brew
 
 ### Example
 
-The following example in coffeescript simple monitors 2 directories (and all their subdirs) full of `.js` files 
+The following example in coffeescript just monitors 2 directories (and all their subdirs) full of `.js` files 
 and combines them together into a single `.js` file. The ordering of the includes matters, and in this example a certain file is singled out
 to be first, even though it's also requested in one of the later directories.
 
@@ -96,8 +97,5 @@ Yes!
 
 ### My TODO
 
-* TODO: pipeline first pass building.
-* TODO: special case handling
-	- 2 different files with same names in different mon'd dirs
-	- entire dir deleted
+* pipeline building.
 * Make run_tests.iced actually check some unit tests
