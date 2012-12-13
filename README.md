@@ -94,5 +94,5 @@ Yes!
 
 ### My TODO
 
-* TODO: pipeline first pass building.
+* pipeline building.
 * Make run_tests.iced actually check some unit tests
