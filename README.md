@@ -43,10 +43,10 @@ my_tasty_brew = new brew {
     "./js/foo/bad_dir/"
   ]
   match:      /^.*\.js$/ # don't compile anything unless it ends in .js 
-  compile:    (path, txt, cb) -> cb null, txt             # the trivial compile
-  join:       (strs, cb)      -> cb null, strs.join "\n"  # the trivial join
-  onChange:   (vh, txt) -> console.log "the brew has changed; version hash = #{vh}"
-  onReady:    (vh, txt) -> console.log "the brew is ready;    version hash = #{vh}"
+  compile:    (path, txt, cb) -> cb null, txt               # the trivial compile
+  join:       (strs, cb)      -> cb null, (strs.join "\n")  # the trivial join
+  onChange:   (vhash, txt)    -> console.log "the brew has changed; version hash = #{vhash}"
+  onReady:    (vhash, txt)    -> console.log "the brew is ready;    version hash = #{vhash}"
 }
 ````
 
