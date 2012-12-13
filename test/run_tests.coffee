@@ -36,4 +36,6 @@ await b = new brew {
   onChange:   (version_hash, txt, ctxt) -> printIt version_hash, txt, ctxt
 }
 
+# -----------------------------------------------------------------------------
+
 printIt version_hash, txt, ctxt
