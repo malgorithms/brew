@@ -40,7 +40,7 @@ tasty_brew = new brew {
     "./js/bar/bad_code.js"
     "./js/foo/bad_dir/"
   ]
-  match:      /^.*.js$/ # don't compile anything unless it ends in .js 
+  match:      /^.*\.js$/ # don't compile anything unless it ends in .js 
   compile:    (path, txt, cb) -> cb null, txt
   join:       (strs, cb)      -> cb null, strs.join "\n"
   onChange:   (vh, txt) -> console.log "the brew has changed; version hash = #{vh}"
