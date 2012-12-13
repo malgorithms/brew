@@ -1,4 +1,4 @@
-# brew
+# BREW
 
 Brew is a NodeJS class that keeps source files compiled and bundled, available in memory. For examples:
 
