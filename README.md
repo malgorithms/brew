@@ -97,5 +97,4 @@ Yes!
 
 ### My TODO
 
-* pipeline building.
-* Make run_tests.iced actually check some unit tests
+* pipeline building
