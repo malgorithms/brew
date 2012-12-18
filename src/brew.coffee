@@ -73,15 +73,20 @@ class brew
   _partialPass: (path, priority) ->
     ###
     happens when we get an fs.watch trigger on a dir or file
-    ###
-    while @_isCompiling
+    ###    
+    if @_isCompiling
       @_log "deferring on compile of #{path} while waiting for another compile"
-      await setTimeout defer(), 50    
+      await @_waiters.push defer()
+    if not @_waiters? then @_waiters = []
     @_isCompiling = true
     d = Date.now()
     await @_recurse path, priority, defer()
     await @_flipToNewContent false, defer()
     @_isCompiling = false
+    if @_waiters.length
+      w = @_waiters[0]
+      @_waiters.splice(0,1)
+      w()
     @_log "[#{Date.now() - d}ms] performed partial pass of #{path};pri=#{priority}"
 
   _flipToNewContent: (is_first_pass, cb) ->
@@ -101,12 +106,13 @@ class brew
         await @_compress res, defer err, cres
         @_compressed_txt = cres
       @_txt         = res
-      @_versionHash = crypto.createHash('md5').update(@_txt).digest('hex')[0...8]
+      @_versionHash = crypto.createHash('md5').update("#{@_txt}").digest('hex')[0...8]
       if not is_first_pass
         @_onChange @_versionHash, @_txt, @getCompressedText()
+      else
       @_log "[#{Date.now() - d}ms] flipped to new content"
     else
-      @_log "[#{Date.now() - d}ms] content unchanged"
+      @_log "[#{Date.now() - d}ms] content unchanged #{@_txt}"
     cb()
 
   _recurse: (p, priority, cb) ->
@@ -116,7 +122,7 @@ class brew
     if p in @_excludes
       @_log "skipping #{p} on recurse due to excludes"
     else
-      await fs.stat p, defer err, stat
+      @_monitorForChanges p, priority
       if not err
         if stat.isDirectory()
           await fs.readdir p, defer err, files
@@ -133,20 +139,26 @@ class brew
         # perhaps this path does not exist;
         if @_files[p]? then delete @_files[p]
         @_log "removing #{p} from files; it went missing"
-      @_monitorForChanges p, priority
+      await fs.stat p, defer err, stat
     cb()
 
   _monitorForChanges: (p, priority) ->
+    console.log "mon: #{p}"
     if @_fs_watchers[p]
-      return
+      # if this path is already being monitored, we stop monitoring
+      # it and start again. Why? because replacing the file will mean
+      # the old one is being watched.
+      @_fs_watchers[p].close()
+      delete @_fs_watchers[p]
     try
       @_log "fs.watch() called for #{p}"
       @_fs_watchers[p] = fs.watch p, {persistent: true}, (evt, fn) =>
+        console.log "ADDED WATCHER FOR #{p}"
+        @_monitorForChanges p, priority
         @_log "fs.watch() triggered for #{p}"
-        @_fs_watchers[p].close() # will be fired back up in the partial pass
-        delete @_fs_watchers[p]
         @_partialPass p, priority
     catch e 
+      console.log "WATCH FAILED FOR #{p}"
       @_log "fs.watch() failed for #{p}; it probably disappeared"
 
   _recurseHandleFile: (p, priority, cb) ->
