@@ -1,6 +1,7 @@
-fs      = require 'fs'
-path    = require 'path'
-crypto  = require 'crypto'
+fs            = require 'fs'
+path          = require 'path'
+crypto        = require 'crypto'
+{tweakables}  = require './tweakables'
 
 class brew
   constructor: (o) ->
@@ -32,11 +33,14 @@ class brew
     @_includeMembers    = {} # keyed by strings in _includes; points at an array of matches in _files
     @_files             = {} # keyed by full paths to files; points to file class objects
     @_fs_watchers       = {} # keyed by full paths to files or dirs; makes sure we have finite watchers
+    @_ready_yet         = false
 
     await @_fullPass defer()
 
     if o.onReady?
       o.onReady @getVersionHash(), @getCompiledText(), @getCompressedText()
+
+    @_monitorLoop()
 
   getVersionHash:  -> 
     if not (@_versionHash? and @_txt?)
@@ -65,31 +69,29 @@ class brew
     @_isCompiling = true
     for p, i in @_includes
       await @_recurse p, i, defer()
-    await @_flipToNewContent true, defer()
+    await @_flipToNewContent defer()
     @_isCompiling = false
     @_log "[#{Date.now() - d}ms] performed full pass"
+    @_ready_yet = true
     cb()
 
-  _partialPass: (path, priority) ->
-    ###
-    happens when we get an fs.watch trigger on a dir or file
-    ###    
-    if @_isCompiling
-      @_log "deferring on compile of #{path} while waiting for another compile"
-      await @_waiters.push defer()
-    if not @_waiters? then @_waiters = []
-    @_isCompiling = true
-    d = Date.now()
-    await @_recurse path, priority, defer()
-    await @_flipToNewContent false, defer()
-    @_isCompiling = false
-    if @_waiters.length
-      w = @_waiters[0]
-      @_waiters.splice(0,1)
-      w()
-    @_log "[#{Date.now() - d}ms] performed partial pass of #{path};pri=#{priority}"
+  _checkKnownFiles: (cb) ->
+    for p, file of @_files
+      await file.possiblyReload @_compile, defer err, res
+    # TODO: Remove failed files from @_files
+    cb()
 
-  _flipToNewContent: (is_first_pass, cb) ->
+  _monitorLoop: ->
+    d = Date.now()
+    # 1. check existing known files
+    await @_checkKnownFiles defer()
+
+    # 2. iterate across requested includes
+    await @_fullPass defer()
+    # TODO: Don't include files already checked in checkKnownFiles
+    setTimeout (=> @_monitorLoop()), tweakables.LOOP_DELAY
+
+  _flipToNewContent: (cb) ->
     ###
     puts together all the compilations
     and generates a new version number
@@ -107,7 +109,7 @@ class brew
         @_compressed_txt = cres
       @_txt         = res
       @_versionHash = crypto.createHash('md5').update("#{@_txt}").digest('hex')[0...8]
-      if not is_first_pass
+      if @_ready_yet
         @_onChange @_versionHash, @_txt, @getCompressedText()
       else
       @_log "[#{Date.now() - d}ms] flipped to new content"
@@ -122,7 +124,7 @@ class brew
     if p in @_excludes
       @_log "skipping #{p} on recurse due to excludes"
     else
-      @_monitorForChanges p, priority
+      await fs.stat p, defer err, stat
       if not err
         if stat.isDirectory()
           await fs.readdir p, defer err, files
@@ -141,25 +143,6 @@ class brew
         @_log "removing #{p} from files; it went missing"
       await fs.stat p, defer err, stat
     cb()
-
-  _monitorForChanges: (p, priority) ->
-    console.log "mon: #{p}"
-    if @_fs_watchers[p]
-      # if this path is already being monitored, we stop monitoring
-      # it and start again. Why? because replacing the file will mean
-      # the old one is being watched.
-      @_fs_watchers[p].close()
-      delete @_fs_watchers[p]
-    try
-      @_log "fs.watch() called for #{p}"
-      @_fs_watchers[p] = fs.watch p, {persistent: true}, (evt, fn) =>
-        console.log "ADDED WATCHER FOR #{p}"
-        @_monitorForChanges p, priority
-        @_log "fs.watch() triggered for #{p}"
-        @_partialPass p, priority
-    catch e 
-      console.log "WATCH FAILED FOR #{p}"
-      @_log "fs.watch() failed for #{p}; it probably disappeared"
 
   _recurseHandleFile: (p, priority, cb) ->
     d = Date.now()

@@ -1,7 +1,8 @@
 {brew} = require '../src/brew'
 fs     = require 'fs'
+path   = require 'path'
 
-NUMBERS     = 20
+NUMBERS     = 1000
 USE_LOGGER  = false # set to true to watch what brew is doing
 
 # -----------------------------------------------------------------------------
@@ -32,13 +33,16 @@ nPath = (num) ->
 
 fullDeletionTest = (b, cb) ->
   console.log "STARTING DELETION TEST\n\n"
+
   for i in [0...NUMBERS]
     await fs.exists nPath(i), defer exists
     if exists
       await fs.unlink nPath(i), defer err
       if err? then console.log err
 
-  await assertCompressedText "full deletion test", b, 0, 1000, defer()
+  await rmdir "#{__dirname}/cases/math/other/subdir", defer()
+
+  await assertCompressedText "full deletion test", b, 0, 10000, defer()
   cb()
 
 # -----------------------------------------------------------------------------
@@ -50,7 +54,33 @@ fullInsertionTest = (b, cb) ->
 
   target = (NUMBERS) * (NUMBERS - 1) / 2
 
-  await assertCompressedText "full insertion test", b, target, 1000, defer()
+  await assertCompressedText "full insertion test", b, target, 10000, defer()
+  cb()
+
+# -----------------------------------------------------------------------------
+
+subdirCreationTest = (b, cb) ->
+  console.log "STARTING SUBDIR CREATION TEST\n\n"
+  dirname = "#{__dirname}/cases/math/other/subdir"
+  await
+    fs.mkdir dirname, defer err
+  if err
+    console.log err
+    process.exit 1  
+  for i in [0...NUMBERS]
+    await fs.writeFile "#{dirname}/#{i}.txt", i, defer err
+
+  target = (NUMBERS) * (NUMBERS - 1) / 2
+  await assertCompressedText "subdir creation test", b, target, 10000, defer()
+  cb()
+
+# -----------------------------------------------------------------------------
+
+subdirDeletionTest = (b, cb) ->
+  console.log "STARTING SUBDIR DELETION TEST\n\n"
+  dirname = "#{__dirname}/cases/math/other/subdir"
+  await rmdir dirname, defer()
+  await assertCompressedText "subdir deletion test", b, 0, 10000, defer()
   cb()
 
 # -----------------------------------------------------------------------------
@@ -66,6 +96,23 @@ myCompress = (str, cb) ->
 
 # -----------------------------------------------------------------------------
 
+rmdir = (dir, cb) ->
+  await fs.readdir dir, defer err, list
+  if not err
+    for f in list
+      filename = path.join dir, f
+      await fs.stat filename, defer err, stat
+      if not (f in ['.','..'])
+        if stat.isDirectory()
+          await rmdir filename, defer()
+        else
+          await fs.unlink filename, defer err
+    await fs.rmdir dir, defer()
+  cb()
+
+# -----------------------------------------------------------------------------
+
+
 await b = new brew {
   includes: ["./cases/math/"]
   excludes: []
@@ -77,15 +124,18 @@ await b = new brew {
   onChange: (vh, txt, ctxt)   -> console.log "change: [#{vh}] #{txt} -> #{ctxt}"
 }
 
-await fullDeletionTest  b, defer()
-await fullInsertionTest b, defer()
-await fullDeletionTest  b, defer()
+d = Date.now()
 
-console.log "SUCCESS"
+await fullDeletionTest    b, defer()
+await fullInsertionTest   b, defer()
+await fullDeletionTest    b, defer()
+await fullDeletionTest    b, defer()
+await fullInsertionTest   b, defer()
+await fullDeletionTest    b, defer()
+await subdirCreationTest  b, defer()
+await subdirDeletionTest  b, defer()
+await fullDeletionTest    b, defer()
+
+console.log "SUCCESS; total time = #{Date.now() - d}ms"
 process.exit 0
 
-# 
-# for i in [0...10]
-#   await fs.writeFile nPath(i), i, defer err
-# await setTimeout defer(), 2000
-# console.log b2.getCompiledText()
