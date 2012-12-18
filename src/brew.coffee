@@ -26,16 +26,16 @@ class brew
     @_onChange          = o.onChange  or (version_hash, txt, compressed_txt) -> 
     @_onReady           = o.onReady   or (version_hash, txt, compressed_txt) ->
     @_logger            = o.logger    or null
-    @_isCompiling       = false
     @_versionHash       = null
     @_txt               = null
     @_compressed_txt    = null
-    @_includeMembers    = {} # keyed by strings in _includes; points at an array of matches in _files
     @_files             = {} # keyed by full paths to files; points to file class objects
-    @_fs_watchers       = {} # keyed by full paths to files or dirs; makes sure we have finite watchers
     @_ready_yet         = false
 
     await @_fullPass defer()
+    await @_flipToNewContent defer()
+
+    @_ready_yet         = true
 
     if o.onReady?
       o.onReady @getVersionHash(), @getCompiledText(), @getCompressedText()
@@ -65,30 +65,36 @@ class brew
   _log: (str) -> if @_logger? then @_logger str
 
   _fullPass: (cb) ->
-    d = Date.now()
-    @_isCompiling = true
+    any_changes = false
     for p, i in @_includes
-      await @_recurse p, i, defer()
-    await @_flipToNewContent defer()
-    @_isCompiling = false
-    @_log "[#{Date.now() - d}ms] performed full pass"
-    @_ready_yet = true
-    cb()
+      await @_recurse p, i, defer changes
+      any_changes = any_changes or changes
+    cb any_changes
 
   _checkKnownFiles: (cb) ->
+    any_changes = false
     for p, file of @_files
-      await file.possiblyReload @_compile, defer err, res
-    # TODO: Remove failed files from @_files
-    cb()
+      await file.possiblyReload @_compile, defer err, changes
+      if err
+        delete @_files[p]
+      any_changes = any_changes or changes
+    cb any_changes
 
   _monitorLoop: ->
+
     d = Date.now()
+
     # 1. check existing known files
-    await @_checkKnownFiles defer()
+    await @_checkKnownFiles defer changes_1
 
     # 2. iterate across requested includes
-    await @_fullPass defer()
-    # TODO: Don't include files already checked in checkKnownFiles
+    await @_fullPass defer changes_2
+
+    # 3. if anything changed, re-join
+    if changes_1 or changes_2
+      await @_flipToNewContent defer()
+      @_log "flipToNewContent in #{Date.now() - d}ms"
+
     setTimeout (=> @_monitorLoop()), tweakables.LOOP_DELAY
 
   _flipToNewContent: (cb) ->
@@ -114,16 +120,16 @@ class brew
       else
       @_log "[#{Date.now() - d}ms] flipped to new content"
     else
-      @_log "[#{Date.now() - d}ms] content unchanged #{@_txt}"
+      @_log "[#{Date.now() - d}ms] content unchanged"
     cb()
 
   _recurse: (p, priority, cb) ->
     ###
     p:  a file or directory
+    cb: true if anything has changed
     ###
-    if p in @_excludes
-      @_log "skipping #{p} on recurse due to excludes"
-    else
+    any_changes = false
+    if not (p in @_excludes)
       await fs.stat p, defer err, stat
       if not err
         if stat.isDirectory()
@@ -131,30 +137,32 @@ class brew
           if not err
             for f in files
               fp = path.join p, f          
-              await @_recurse fp, priority, defer()
+              await @_recurse fp, priority, defer changes
+              any_changes = any_changes or changes
         else if stat.isFile()
           if path.basename(p).match @_match
-            await @_recurseHandleFile p, priority, defer()
-          else
-            @_log "skipping #{p} on recurse due to filename regexp match"
+            await @_recurseHandleFile p, priority, defer changes
+            any_changes = any_changes or changes
       else
         # perhaps this path does not exist;
         if @_files[p]? then delete @_files[p]
         @_log "removing #{p} from files; it went missing"
-      await fs.stat p, defer err, stat
-    cb()
+        any_changes = true
+    cb any_changes
 
   _recurseHandleFile: (p, priority, cb) ->
-    d = Date.now()
-    if not @_files[p]? then @_files[p] = new file p, priority
-    @_files[p].setPriority Math.min priority, @_files[p].getPriority()
-
-    await @_files[p].possiblyReload @_compile, defer(err, did_reload)
-    if did_reload
-      @_log "[#{Date.now() - d}ms] read & compiled #{p}"
+    did_reload = false
+    if not @_files[p]?
+      d = Date.now()
+      @_files[p] = new file p, priority
+      await @_files[p].possiblyReload @_compile, defer err, did_reload
+      if did_reload
+        @_log "[#{Date.now() - d}ms] read & compiled #{p}"
+      else
+        @_log "[#{Date.now() - d}ms] ignored #{p}; unchanged"
     else
-      @_log "[#{Date.now() - d}ms] ignored #{p}; unchanged"
-    cb()
+      @_files[p].setPriority Math.min priority, @_files[p].getPriority()    
+    cb did_reload
 
 # -----------------------------------------------------------------------------
 
@@ -169,19 +177,28 @@ class file
     @_src_txt         = null
     @_compiled_txt    = null
     @_err             = null
+    @_lastChecked     = null
 
   possiblyReload: (compile_fn, cb) ->
-    await fs.readFile @_path, "utf8", defer(err, data)
-    @_err = null
-    if err
-      @_err = err
-      cb err, null
-    else if data isnt @_src_txt      
-      @_src_txt = data
-      await compile_fn @_path, @_src_txt, defer err, @_compiled_txt
-      cb null, true
-    else
-      cb null, false
+    now       = Date.now()
+    reloaded  = false
+    await fs.stat @_path, defer @_err, stat
+    if not @_err
+      changed = Math.max(stat.mtime.getTime(), stat.ctime.getTime())
+      if changed >= @_lastChecked - 1000 # changed might be rounded down by OS
+        await fs.readFile @_path, "utf8", defer @_err, data
+        if not @_err
+          if data isnt @_src_txt
+            @_src_txt = data
+            await compile_fn @_path, @_src_txt, defer err, @_compiled_txt
+            reloaded = true
+          else
+            reloaded = false
+
+      @_lastChecked = now
+    if @_err
+      reloaded = true
+    cb @_err, reloaded
 
   isOk:               -> not @_err 
   getCompiledText:    -> @_compiled_txt

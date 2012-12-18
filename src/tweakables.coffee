@@ -1,3 +1,3 @@
 
 exports.tweakables = 
-  LOOP_DELAY: 100
+  LOOP_DELAY: 500

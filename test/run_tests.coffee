@@ -2,8 +2,11 @@
 fs     = require 'fs'
 path   = require 'path'
 
-NUMBERS     = 1000
-USE_LOGGER  = false # set to true to watch what brew is doing
+NUMBERS           = 100
+TIME_TO_COMPRESS  = 10   # ms; simulate a slow compress
+TIME_TO_JOIN      = 10   # ms; simulate a slow join
+TIME_TO_COMPILE   = 10   # ms; simulate a slow compile
+USE_LOGGER        = true # set to true to watch what brew is doing
 
 # -----------------------------------------------------------------------------
 
@@ -89,10 +92,23 @@ myCompress = (str, cb) ->
   ###
   adds up all the numbers in a comma-separated string
   ###
+  await setTimeout defer(), TIME_TO_COMPRESS
   nums = str.split ","
   sum  = 0
   if str.length then sum += parseInt n for n in nums
   cb null, sum
+
+# -----------------------------------------------------------------------------
+
+myJoin = (strs, cb) ->
+  await setTimeout defer(), TIME_TO_JOIN
+  cb null, strs.join ","
+
+# -----------------------------------------------------------------------------
+
+myCompile = (p, str, cb) ->
+  await setTimeout defer(), TIME_TO_COMPILE
+  cb null, str
 
 # -----------------------------------------------------------------------------
 
@@ -117,9 +133,10 @@ await b = new brew {
   includes: ["./cases/math/"]
   excludes: []
   match:      /^.*.txt$/
-  join:       (strs, cb)      -> cb null, strs.join ","
-  logger:     (line)          -> if USE_LOGGER then console.log "brew speaks: #{line}"
+  join:       (strs, cb)      -> myJoin strs, cb
   compress:   (str, cb)       -> myCompress str, cb
+  compile:    (p, str, cb)    -> myCompile p, str, cb
+  logger:     (line)          -> if USE_LOGGER then console.log "brew speaks: #{line}"
   onReady:                       defer vh, txt, ctxt
   onChange: (vh, txt, ctxt)   -> console.log "change: [#{vh}] #{txt} -> #{ctxt}"
 }
@@ -136,6 +153,6 @@ await subdirCreationTest  b, defer()
 await subdirDeletionTest  b, defer()
 await fullDeletionTest    b, defer()
 
-console.log "SUCCESS; total time = #{Date.now() - d}ms"
-process.exit 0
+console.log "\n\n\nSUCCESS; total time = #{Date.now() - d}ms\n\n\n"
+process.exit 1
 
