@@ -1,31 +1,32 @@
 fs            = require 'fs'
 path          = require 'path'
 crypto        = require 'crypto'
-{tweakables}  = require './tweakables'
 
 class brew
   constructor: (o) ->
     ###
     o (dict argument): 
-      includes: a sorted list of files and/or dirs to include
-      excludes: (optional) any exceptions (files and/or dirs) to the includes
-      match:    (optional) a regular expression any file must match; say if you want to limit to extensions
-      compile:  (optional) fn to call on each file's contents; takes (filename, str, cb) as arguments; if missing, just returns text
-      join:     (optional) fn takes all the (sorted) compiled strings and joins them together for final output
-      compress: (optional) fn that takes final output str and combines together into a new compressed string
-      onChange: (optional) a callback when anything changes in the brew. takes (passes version_hash, txt) as argument
-      onReady:  (optional) a callback for when the first compilation pass is done and the brew is ready
-      logger:   (optional) a function that handles lines of logs
+      includes:   a sorted list of files and/or dirs to include
+      excludes:   (optional) any exceptions (files and/or dirs) to the includes
+      match:      (optional) a regular expression any file must match; say if you want to limit to extensions
+      compile:    (optional) fn to call on each file's contents; takes (filename, str, cb) as arguments; if missing, just returns text
+      join:       (optional) fn takes all the (sorted) compiled strings and joins them together for final output
+      compress:   (optional) fn that takes final output str and combines together into a new compressed string
+      onChange:   (optional) a callback when anything changes in the brew. takes (passes version_hash, txt) as argument
+      onReady:    (optional) a callback for when the first compilation pass is done and the brew is ready
+      logger:     (optional) a function that handles lines of logs
+      loop_delay: (optional) time in ms between checking for filesystem changes
     ###
     @_includes          = (path.resolve(p) for p in (o.includes  or []))
     @_excludes          = (path.resolve(p) for p in (o.excludes  or []))
-    @_match             = o.match     or /.*/
-    @_compile           = o.compile   or        (p, str, cb) -> cb null, str
-    @_join              = o.join      or          (strs, cb) -> cb null, strs.join "\n"
-    @_compress          = o.compress  or null
-    @_onChange          = o.onChange  or (version_hash, txt, compressed_txt) -> 
-    @_onReady           = o.onReady   or (version_hash, txt, compressed_txt) ->
-    @_logger            = o.logger    or null
+    @_match             = o.match      or /.*/
+    @_compile           = o.compile    or        (p, str, cb) -> cb null, str
+    @_join              = o.join       or          (strs, cb) -> cb null, strs.join "\n"
+    @_compress          = o.compress   or null
+    @_onChange          = o.onChange   or (version_hash, txt, compressed_txt) ->
+    @_onReady           = o.onReady    or (version_hash, txt, compressed_txt) ->
+    @_logger            = o.logger     or null
+    @_loop_delay        = o.loop_delay or 500
     @_versionHash       = null
     @_txt               = null
     @_compressed_txt    = null
@@ -95,7 +96,7 @@ class brew
       await @_flipToNewContent defer()
       @_log "flipToNewContent in #{Date.now() - d}ms"
 
-    setTimeout (=> @_monitorLoop()), tweakables.LOOP_DELAY
+    setTimeout (=> @_monitorLoop()), @_loop_delay
 
   _flipToNewContent: (cb) ->
     ###
