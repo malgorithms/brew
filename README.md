@@ -2,7 +2,7 @@
 
 Brew is a NodeJS class that keeps source files compiled and bundled, available in memory. For examples:
 
-* Keeping a bunch of `less` and `css` files compiled into a single chunk of css.
+* Keeping a bunch of `style`, `less`, and/or `css` files compiled into a single chunk of css.
 * Compiling front-end `coffee` and `js` into a single `js` package.
 * Compiling templates from `toffee`, `eco`, or whatever into js
 * Heck, any other kind of compiling you want
