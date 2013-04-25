@@ -94,7 +94,7 @@ class brew
     # 3. if anything changed, re-join
     if changes_1 or changes_2
       await @_flipToNewContent defer()
-      @_log "flipToNewContent in #{Date.now() - d}ms"
+      @_log "flipToNewContent in #{Date.now() - d}ms [#{changes_1}|#{changes_2}]"
 
     setTimeout (=> @_monitorLoop()), @_loop_delay
 
@@ -146,9 +146,10 @@ class brew
             any_changes = any_changes or changes
       else
         # perhaps this path does not exist;
-        if @_files[p]? then delete @_files[p]
-        @_log "removing #{p} from files; it went missing"
-        any_changes = true
+        if @_files[p]?
+          delete @_files[p]
+          @_log "removing #{p} from files; it went missing"
+          any_changes = true
     cb any_changes
 
   _recurseHandleFile: (p, priority, cb) ->

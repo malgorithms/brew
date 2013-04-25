@@ -1,7 +1,7 @@
 {
  "name": "brew",
  "description": "A NodeJS module for compiling and packaging together files with async updates.",
- "version": "0.0.4",
+ "version": "0.0.5",
  "directories": {
   "lib": "./lib"
  },
