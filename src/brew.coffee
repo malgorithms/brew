@@ -43,14 +43,16 @@ class brew
 
     @_monitorLoop()
 
+  isReady: -> @_versionHash? and @_txt?
+
   getVersionHash:  -> 
-    if not (@_versionHash? and @_txt?)
-      throw new Error "getVersionHash() called before onReady(); wait for your brew to brew!"
+    if not @isReady()
+      throw new Error "getVersionHash() called before onReady(); wait for your brew to brew or check isReady()!"
     @_versionHash
 
   getCompiledText: -> 
-    if not (@_versionHash? and @_txt?)
-      throw new Error "getCompiledText() called before onReady(); wait for your brew to brew!"  
+    if not @isReady()
+      throw new Error "getCompiledText() called before onReady(); wait for your brew to brew or check isReady()!"  
     @_txt
 
   getCompressedText: ->
