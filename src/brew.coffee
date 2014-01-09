@@ -1,6 +1,7 @@
 fs            = require 'fs'
 path          = require 'path'
 crypto        = require 'crypto'
+googlediff    = require 'googlediff'
 
 class brew
   constructor: (o) ->
@@ -16,22 +17,28 @@ class brew
       onReady:    (optional) a callback for when the first compilation pass is done and the brew is ready
       logger:     (optional) a function that handles lines of logs
       loop_delay: (optional) time in ms between checking for filesystem changes
+      change_triggers: (optional) an array of pairs of regexps, where the first item is a regexp matching trigger files, and the second matches target files
+        if a file matching the first regexp changes (the source or the compilation), it will trigger
+          a recompile of any known file matching the righthand regexp, even if that file hasn't changed.
+          for example: [/styl\/colors.styl^\/, \/styl\/.*.styl^/] recompiles everything in the styl directory if colors.styl changes
     ###
     @_includes          = (path.resolve(p) for p in (o.includes  or []))
     @_excludes          = (path.resolve(p) for p in (o.excludes  or []))
-    @_match             = o.match      or /.*/
-    @_compile           = o.compile    or        (p, str, cb) -> cb null, str
-    @_join              = o.join       or          (strs, cb) -> cb null, strs.join "\n"
-    @_compress          = o.compress   or null
-    @_onChange          = o.onChange   or (version_hash, txt, compressed_txt) ->
-    @_onReady           = o.onReady    or (version_hash, txt, compressed_txt) ->
-    @_logger            = o.logger     or null
-    @_loop_delay        = o.loop_delay or 500
+    @_match             = o.match           or /.*/
+    @_compile           = o.compile         or        (p, str, cb) -> cb null, str
+    @_join              = o.join            or          (strs, cb) -> cb null, strs.join "\n"
+    @_compress          = o.compress        or null
+    @_onChange          = o.onChange        or (version_hash, txt, compressed_txt) ->
+    @_onReady           = o.onReady         or (version_hash, txt, compressed_txt) ->
+    @_logger            = o.logger          or null
+    @_loop_delay        = o.loop_delay      or 500
+    @_change_triggers   = o.change_triggers or []
     @_versionHash       = null
     @_txt               = null
     @_compressed_txt    = null
     @_files             = {} # keyed by full paths to files; points to file class objects
     @_ready_yet         = false
+    @_alive             = true
 
     await @_fullPass defer()
     await @_flipToNewContent defer()
@@ -59,13 +66,16 @@ class brew
     if not (@_versionHash? and @_compressed_txt?)
       throw new Error "getCompressedText() called before onReady(); wait for your brew to brew!" 
     if not @_compress?
-      log.brew.info "requested compressed text, but not compress fn provided; returning regular text"
+      @_log "requested compressed text, but not compress fn provided; returning regular text"
       return @_txt
     return @_compressed_txt
 
+  kill: ->
+    @_alive = false
+
   # --------------- PRIVATE PARTY BELOW ---------------------------------------
 
-  _log: (str) -> if @_logger? then @_logger str
+  _log: (str) => if @_logger? then @_logger str
 
   _fullPass: (cb) ->
     any_changes = false
@@ -77,7 +87,7 @@ class brew
   _checkKnownFiles: (cb) ->
     any_changes = false
     for p, file of @_files
-      await file.possiblyReload @_compile, defer err, changes
+      await @_possiblyReload p, file, defer err, changes
       if err
         delete @_files[p]
       any_changes = any_changes or changes
@@ -95,17 +105,20 @@ class brew
 
     # 3. if anything changed, re-join
     if changes_1 or changes_2
-      await @_flipToNewContent defer()
-      @_log "flipToNewContent in #{Date.now() - d}ms [#{changes_1}|#{changes_2}]"
+      await @_flipToNewContent defer any_final_changes
 
-    setTimeout (=> @_monitorLoop()), @_loop_delay
+    if any_final_changes
+      @_log "[#{Date.now() - d}ms] flipToNewContent: (#{@_versionHash})"
+
+    # if we haven't killed the monitor loop
+    if @_alive
+      setTimeout (=> @_monitorLoop()), @_loop_delay
 
   _flipToNewContent: (cb) ->
     ###
     puts together all the compilations
     and generates a new version number
     ###
-    d = Date.now()
     paths = (fp for fp, f of @_files when f.isOk())
     paths.sort (a,b) => @_files[a].getPriority() - @_files[b].getPriority()
     txts = []
@@ -120,11 +133,10 @@ class brew
       @_versionHash = crypto.createHash('md5').update("#{@_txt}").digest('hex')[0...8]
       if @_ready_yet
         @_onChange @_versionHash, @_txt, @getCompressedText()
-      else
-      @_log "[#{Date.now() - d}ms] flipped to new content"
+      any_changes = true
     else
-      @_log "[#{Date.now() - d}ms] content unchanged"
-    cb()
+      any_changes = false
+    cb any_changes
 
   _recurse: (p, priority, cb) ->
     ###
@@ -157,25 +169,37 @@ class brew
   _recurseHandleFile: (p, priority, cb) ->
     did_reload = false
     if not @_files[p]?
-      d = Date.now()
-      @_files[p] = new file p, priority
-      await @_files[p].possiblyReload @_compile, defer err, did_reload
-      if did_reload
-        @_log "[#{Date.now() - d}ms] read & compiled #{p}"
-      else
-        @_log "[#{Date.now() - d}ms] ignored #{p}; unchanged"
+      @_files[p] = new file p, priority, @_log
+      await @_possiblyReload p, @_files[p], defer err, did_reload
     else
       @_files[p].setPriority Math.min priority, @_files[p].getPriority()    
     cb did_reload
 
+  _possiblyReload: (p, f, cb) ->
+    await f.possiblyReload @_compile, defer err, did_reload
+    if did_reload 
+      # hande any triggered recompiles
+      for ct in @_change_triggers
+        if p.match ct[0]
+          if f.isOk()
+            for p2, f2 of @_files when f2 isnt f
+              if p2.match ct[1]
+                await f2.reload @_compile, true, defer f2_reloaded
+                if f2_reloaded
+                  @_log "#{p} triggered a recompile of #{p2}"
+          else
+            @_log "#{p} isn't ok, so change trigger ignored"
+    cb err, did_reload
+
 # -----------------------------------------------------------------------------
 
 class file
-  constructor: (p, priority) ->
+  constructor: (p, priority, log_fn) ->
     ###
-    p = path
-    pri = 0, 1, etc. (0 is lowest)
+      p = path
+      pri = 0, 1, etc. (0 is lowest)
     ###
+    @_log             = log_fn or ->
     @_path            = p
     @_priority        = priority
     @_src_txt         = null
@@ -183,23 +207,41 @@ class file
     @_err             = null
     @_lastChecked     = null
 
+  reload: (compile_fn, force, cb) ->
+    ###
+      if force is set to true, then the 
+      file will be recompiled even if the src
+      is unchanged; this makes sense if we know the
+      file depends on something else which has changed,
+      say an import in a .styl file
+    ###
+
+    now               = Date.now()
+    old_src_txt       = @_src_txt
+    old_compiled_txt  = @_compiled_txt 
+    await fs.readFile @_path, "utf8", defer @_err, data
+    if not @_err
+      if (data isnt @_src_txt) or force
+        @_src_txt = data
+        await compile_fn @_path, @_src_txt, defer err, @_compiled_txt
+      src_changed       = @_src_txt       isnt old_src_txt
+      compiled_changed  = @_compiled_txt  isnt old_compiled_txt
+      reloaded          = src_changed or compiled_changed
+      if reloaded
+        @_log "[#{Date.now() - now}ms] #{@_path} changed; src changed: #{src_changed} | compiled changed: #{compiled_changed}"
+      @_lastChecked = now
+    else
+      @_log "Error reading file: #{@_path} - counting as reload"
+      reloaded = true
+    cb reloaded
+
   possiblyReload: (compile_fn, cb) ->
-    now       = Date.now()
     reloaded  = false
     await fs.stat @_path, defer @_err, stat
     if not @_err
       changed = Math.max(stat.mtime.getTime(), stat.ctime.getTime())
       if changed >= @_lastChecked - 1000 # changed might be rounded down by OS
-        await fs.readFile @_path, "utf8", defer @_err, data
-        if not @_err
-          if data isnt @_src_txt
-            @_src_txt = data
-            await compile_fn @_path, @_src_txt, defer err, @_compiled_txt
-            reloaded = true
-          else
-            reloaded = false
-
-      @_lastChecked = now
+        await @reload compile_fn, false, defer reloaded
     if @_err
       reloaded = true
     cb @_err, reloaded
@@ -209,6 +251,7 @@ class file
   getSrc:             -> @_src
   getPriority:        -> @_priority
   setPriority: (pri)  -> @_priority = pri
+  getPath:            -> @_path
 
 # -----------------------------------------------------------------------------
 
