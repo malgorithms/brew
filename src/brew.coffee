@@ -1,7 +1,6 @@
 fs            = require 'fs'
 path          = require 'path'
 crypto        = require 'crypto'
-googlediff    = require 'googlediff'
 
 class brew
   constructor: (o) ->
